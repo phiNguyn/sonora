@@ -20,12 +20,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate file type
-    if (!file.type.startsWith('audio/')) {
+    // Validate file type - check by extension since some formats have generic MIME types
+    const audioExtensions = ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.opus', '.weba']
+    const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'))
+    const isAudioByExtension = audioExtensions.includes(fileExtension)
+    const isAudioByMime = file.type.startsWith('audio/') || file.type === 'application/octet-stream'
+
+    if (!isAudioByExtension && !isAudioByMime) {
       return NextResponse.json(
         {
           success: false,
-          error: 'File must be an audio file',
+          error: `File must be an audio file. Supported: ${audioExtensions.join(', ')}`,
         },
         { status: 400 }
       )
@@ -59,11 +64,28 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
+    // Determine correct MIME type
+    let mimeType = file.type
+    if (!mimeType || mimeType === 'application/octet-stream') {
+      // Map file extensions to MIME types
+      const mimeTypeMap: Record<string, string> = {
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.flac': 'audio/flac',
+        '.aac': 'audio/aac',
+        '.ogg': 'audio/ogg',
+        '.m4a': 'audio/mp4',
+        '.opus': 'audio/opus',
+        '.weba': 'audio/webp',
+      }
+      mimeType = mimeTypeMap[fileExtension] || 'audio/mpeg'
+    }
+
     // Upload to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from(bucketName)
       .upload(filePath, buffer, {
-        contentType: file.type,
+        contentType: mimeType,
         cacheControl: '3600',
         upsert: false,
       })
@@ -86,7 +108,7 @@ export async function POST(request: NextRequest) {
           source: 'supabase',
           file_path: uploadData.path,
           size: file.size,
-          mime_type: file.type,
+          mime_type: mimeType,
           duration: 0,
         },
       ])

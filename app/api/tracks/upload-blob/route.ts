@@ -21,12 +21,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate file type
-    if (!file.type.startsWith('audio/')) {
+    // Validate file type - check by extension since some formats have generic MIME types
+    const audioExtensions = ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.opus', '.weba']
+    const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'))
+    const isAudioByExtension = audioExtensions.includes(fileExtension)
+    const isAudioByMime = file.type.startsWith('audio/') || file.type === 'application/octet-stream'
+
+    if (!isAudioByExtension && !isAudioByMime) {
       return NextResponse.json(
         {
           success: false,
-          error: 'File must be an audio file',
+          error: `File must be an audio file. Supported: ${audioExtensions.join(', ')}`,
         },
         { status: 400 }
       )
