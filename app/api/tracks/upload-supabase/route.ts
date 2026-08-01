@@ -44,11 +44,26 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient()
     const filePath = `tracks/${Date.now()}-${file.name}`
+    const bucketName = 'audio-files'
+
+    // Create bucket if it doesn't exist
+    try {
+      await supabase.storage.createBucket(bucketName, {
+        public: true,
+      })
+    } catch {
+      // Bucket already exists, continue
+    }
+
+    // Convert file to bytes
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
 
     // Upload to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('audio-files')
-      .upload(filePath, file, {
+      .from(bucketName)
+      .upload(filePath, buffer, {
+        contentType: file.type,
         cacheControl: '3600',
         upsert: false,
       })
@@ -57,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     // Get public URL
     const { data: publicData } = supabase.storage
-      .from('audio-files')
+      .from(bucketName)
       .getPublicUrl(uploadData.path)
 
     // Save metadata to Supabase

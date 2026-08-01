@@ -10,6 +10,29 @@ import { Playlist, Track } from './playlist'
 import { AudioUploadModal } from './audio-upload-modal'
 import { TrackSourceSelector } from './track-source-selector'
 
+// Helper function to convert URLs to playable format
+function getPlayableUrl(track: Track): string {
+  if (!track.url) return ''
+
+  // If it's a Google Drive URL, use our proxy
+  if (track.source === 'google_drive' && track.file_path) {
+    return `/api/proxy/google-drive?fileId=${track.file_path}`
+  }
+
+  // For Vercel Blob (private), URLs are already signed
+  if (track.source === 'blob') {
+    return track.url
+  }
+
+  // For Supabase Storage, use direct public URL
+  if (track.source === 'supabase') {
+    return track.url
+  }
+
+  // Default: use URL as-is
+  return track.url
+}
+
 const SAMPLE_TRACKS: Track[] = [
   {
     id: '1',
@@ -83,7 +106,8 @@ export function AudioPlayer() {
   // Update audio element src when track changes
   useEffect(() => {
     if (audioRef.current && currentTrack?.url) {
-      audioRef.current.src = currentTrack.url
+      const playableUrl = getPlayableUrl(currentTrack)
+      audioRef.current.src = playableUrl
       if (isPlaying) {
         audioRef.current.play().catch(() => {
           // CORS or other playback issues
