@@ -51,13 +51,23 @@ export async function POST(request: NextRequest) {
     const filePath = `tracks/${Date.now()}-${file.name}`
     const bucketName = 'audio-files'
 
+    // List buckets to check if audio-files exists
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets()
+    
+    if (listError) {
+      throw new Error(`Failed to list buckets: ${listError.message}`)
+    }
+
+    const bucketExists = buckets?.some((b) => b.name === bucketName)
+
     // Create bucket if it doesn't exist
-    try {
-      await supabase.storage.createBucket(bucketName, {
+    if (!bucketExists) {
+      const { error: createError } = await supabase.storage.createBucket(bucketName, {
         public: true,
       })
-    } catch {
-      // Bucket already exists, continue
+      if (createError) {
+        throw new Error(`Failed to create bucket: ${createError.message}`)
+      }
     }
 
     // Convert file to bytes
@@ -90,7 +100,9 @@ export async function POST(request: NextRequest) {
         upsert: false,
       })
 
-    if (uploadError) throw uploadError
+    if (uploadError) {
+      throw new Error(`Upload failed: ${uploadError.message}`)
+    }
 
     // Get public URL
     const { data: publicData } = supabase.storage
