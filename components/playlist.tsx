@@ -8,6 +8,8 @@ export interface Track {
   title: string
   artist: string
   duration: number
+  url?: string
+  source?: 'blob' | 'supabase' | 'google_drive' | 'local'
 }
 
 interface PlaylistProps {

@@ -1,8 +1,8 @@
-import { AudioPlayer } from '@/components/audio-player'
+import { AudioPlayer } from '@/components/audio-player-enhanced'
 
 export default function Page() {
   return (
-    <main className="min-h-screen">
+    <main>
       <AudioPlayer />
     </main>
   )
