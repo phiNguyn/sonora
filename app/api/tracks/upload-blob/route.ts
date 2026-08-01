@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { uploadToBlob, saveTrackMetadata } from '@/lib/storage'
+import { put } from '@vercel/blob'
+import { createClient } from '@/lib/supabase/server'
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
@@ -42,30 +43,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Upload to Blob
-    const { url, size } = await uploadToBlob(file, file.name)
+    // Upload to Vercel Blob
+    const filename = `${Date.now()}-${file.name}`
+    const blob = await put(filename, file, {
+      access: 'public',
+      addRandomSuffix: true,
+    })
 
     // Save metadata to Supabase
-    const track = await saveTrackMetadata({
-      title,
-      artist,
-      duration: 0, // Will be updated when audio metadata is read
-      url,
-      source: 'blob',
-      size,
-      mime_type: file.type,
-    })
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from('tracks')
+      .insert([
+        {
+          title,
+          artist,
+          url: blob.url,
+          source: 'blob',
+          file_path: blob.pathname,
+          size: file.size,
+          mime_type: file.type,
+          duration: 0, // Duration will be calculated on client
+        },
+      ])
+      .select()
+      .single()
+
+    if (error) throw error
 
     return NextResponse.json({
       success: true,
-      track,
+      track: data,
     })
   } catch (error) {
     console.error('Error uploading to Blob:', error)
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Upload failed',
+        error: error instanceof Error ? error.message : 'Failed to upload file',
       },
       { status: 500 }
     )

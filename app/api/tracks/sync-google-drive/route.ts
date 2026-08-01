@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { saveTrackMetadata, getAllTracks } from '@/lib/storage'
+import { createClient } from '@/lib/supabase/server'
 
 // Parse Google Drive folder ID from URL
 // Formats: 
@@ -78,13 +78,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if we already have files from this drive folder
-    const existingTracks = await getAllTracks('google_drive')
+    const supabase = await createClient()
+    const { data: existingTracks } = await supabase
+      .from('tracks')
+      .select('*')
+      .eq('source', 'google_drive')
 
     return NextResponse.json({
       success: true,
       message: 'Google Drive folder connected',
-      synced: existingTracks,
-      total: existingTracks.length,
+      synced: existingTracks || [],
+      total: existingTracks?.length || 0,
     })
   } catch (error) {
     console.error('Error syncing Google Drive:', error)
@@ -118,15 +122,24 @@ export async function PUT(request: NextRequest) {
     const trackTitle = title || `Google Drive Track`
     const trackArtist = artist || 'Unknown'
 
-    const track = await saveTrackMetadata({
-      title: trackTitle,
-      artist: trackArtist,
-      duration: 0,
-      url,
-      source: 'google_drive',
-      file_path: fileId || undefined,
-      mime_type: 'audio/mpeg',
-    })
+    const supabase = await createClient()
+    const { data: track, error } = await supabase
+      .from('tracks')
+      .insert([
+        {
+          title: trackTitle,
+          artist: trackArtist,
+          duration: 0,
+          url,
+          source: 'google_drive',
+          file_path: fileId || undefined,
+          mime_type: 'audio/mpeg',
+        },
+      ])
+      .select()
+      .single()
+
+    if (error) throw error
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { uploadToSupabaseStorage, saveTrackMetadata } from '@/lib/storage'
+import { createClient } from '@/lib/supabase/server'
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
@@ -42,31 +42,54 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Upload to Supabase Storage
-    const { url, path, size } = await uploadToSupabaseStorage(file, file.name)
+    const supabase = await createClient()
+    const filePath = `tracks/${Date.now()}-${file.name}`
 
-    // Save metadata to Supabase database
-    const track = await saveTrackMetadata({
-      title,
-      artist,
-      duration: 0,
-      url,
-      source: 'supabase',
-      file_path: path,
-      size,
-      mime_type: file.type,
-    })
+    // Upload to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('audio-files')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      })
+
+    if (uploadError) throw uploadError
+
+    // Get public URL
+    const { data: publicData } = supabase.storage
+      .from('audio-files')
+      .getPublicUrl(uploadData.path)
+
+    // Save metadata to Supabase
+    const { data: trackData, error: trackError } = await supabase
+      .from('tracks')
+      .insert([
+        {
+          title,
+          artist,
+          url: publicData.publicUrl,
+          source: 'supabase',
+          file_path: uploadData.path,
+          size: file.size,
+          mime_type: file.type,
+          duration: 0,
+        },
+      ])
+      .select()
+      .single()
+
+    if (trackError) throw trackError
 
     return NextResponse.json({
       success: true,
-      track,
+      track: trackData,
     })
   } catch (error) {
     console.error('Error uploading to Supabase:', error)
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Upload failed',
+        error: error instanceof Error ? error.message : 'Failed to upload file',
       },
       { status: 500 }
     )
